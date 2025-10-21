@@ -66,6 +66,17 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+# Serve static files (HTML client)
+app.mount("/static", StaticFiles(directory=".", html=True), name="static")
+
+@app.get("/")
+async def read_root():
+    """Serve the main HTML client"""
+    return FileResponse("index.html", media_type="text/html")
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""

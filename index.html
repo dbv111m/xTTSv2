@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TTS API Client</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        .btn-primary {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border: none;
+            border-radius: 25px;
+            padding: 10px 30px;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        .form-control {
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+        }
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        .audio-player {
+            width: 100%;
+            margin-top: 10px;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-healthy {
+            background-color: #28a745;
+        }
+        .status-error {
+            background-color: #dc3545;
+        }
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        .result-card {
+            animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .tab-content {
+            padding-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <div class="row justify-content-center">
+            <div class="col-12 col-md-10 col-lg-8">
+                <!-- Header -->
+                <div class="text-center mb-4">
+                    <h1 class="text-white mb-2">
+                        <i class="bi bi-mic-fill"></i> TTS API Client
+                    </h1>
+                    <p class="text-white-50">Universal Text-to-Speech API with Voice Cloning</p>
+                    <div id="health-status" class="mt-3">
+                        <span class="status-indicator status-error"></span>
+                        <small class="text-white-50">Checking API status...</small>
+                    </div>
+                </div>
+
+                <!-- API Status Check -->
+                <div id="health-check"
+                     hx-get="/health"
+                     hx-target="#health-status"
+                     hx-swap="innerHTML"
+                     hx-trigger="load, every 30s">
+                </div>
+
+                <!-- Navigation Tabs -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <ul class="nav nav-tabs card-header-tabs" id="apiTabs" role="tablist">
+                            <li class="nav-item">
+                                <a class="nav-link active" id="tts-tab" data-bs-toggle="tab" href="#tts" role="tab">
+                                    <i class="bi bi-chat-dots"></i> Text to Speech
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" id="clone-tab" data-bs-toggle="tab" href="#clone" role="tab">
+                                    <i class="bi bi-person-bounding-box"></i> Voice Clone
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" id="info-tab" data-bs-toggle="tab" href="#info" role="tab">
+                                    <i class="bi bi-info-circle"></i> API Info
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="card-body">
+                        <div class="tab-content">
+
+                            <!-- Text to Speech Tab -->
+                            <div class="tab-pane fade show active" id="tts" role="tabpanel">
+                                <h4 class="card-title mb-3">
+                                    <i class="bi bi-mic"></i> Convert Text to Speech
+                                </h4>
+
+                                <form hx-post="/tts"
+                                      hx-target="#tts-result"
+                                      hx-encoding="multipart/form-data"
+                                      hx-swap="innerHTML"
+                                      hx-indicator="#tts-loading">
+
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <label for="tts-text" class="form-label">Text to convert</label>
+                                            <textarea class="form-control" id="tts-text" name="text" rows="3"
+                                                      placeholder="Enter text to convert to speech..." required></textarea>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <label for="tts-language" class="form-label">Language</label>
+                                            <select class="form-select" id="tts-language" name="language">
+                                                <option value="en">English (en)</option>
+                                                <option value="es">Spanish (es)</option>
+                                                <option value="fr">French (fr)</option>
+                                                <option value="de">German (de)</option>
+                                                <option value="it">Italian (it)</option>
+                                                <option value="pt">Portuguese (pt)</option>
+                                                <option value="ru">Russian (ru)</option>
+                                                <option value="zh-cn">Chinese (zh-cn)</option>
+                                                <option value="ja">Japanese (ja)</option>
+                                                <option value="ko">Korean (ko)</option>
+                                                <option value="ar">Arabic (ar)</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <label for="tts-speaker" class="form-label">Voice (optional)</label>
+                                            <input type="text" class="form-control" id="tts-speaker" name="speaker"
+                                                   placeholder="e.g., Daisy Studious">
+                                            <div class="form-text">
+                                                Leave empty to use default voice
+                                            </div>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <label for="tts-format" class="form-label">Output format</label>
+                                            <select class="form-select" id="tts-format" name="output_format">
+                                                <option value="wav">WAV</option>
+                                                <option value="mp3">MP3</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <label for="tts-speaker-wav" class="form-label">Reference audio (optional)</label>
+                                            <input type="text" class="form-control" id="tts-speaker-wav" name="speaker_wav"
+                                                   placeholder="Path to reference audio file">
+                                            <div class="form-text">
+                                                For voice cloning (leave empty for standard voices)
+                                            </div>
+                                        </div>
+
+                                        <div class="col-12">
+                                            <button type="submit" class="btn btn-primary w-100">
+                                                <i class="bi bi-play-circle"></i> Generate Speech
+                                                <div id="tts-loading" class="htmx-indicator">
+                                                    <div class="spinner-border spinner-border-sm ms-2" role="status"></div>
+                                                </div>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+
+                                <div id="tts-result" class="mt-4"></div>
+                            </div>
+
+                            <!-- Voice Clone Tab -->
+                            <div class="tab-pane fade" id="clone" role="tabpanel">
+                                <h4 class="card-title mb-3">
+                                    <i class="bi bi-person-bounding-box"></i> Clone Voice from Audio
+                                </h4>
+
+                                <form hx-post="/clone"
+                                      hx-target="#clone-result"
+                                      hx-encoding="multipart/form-data"
+                                      hx-swap="innerHTML"
+                                      hx-indicator="#clone-loading">
+
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <label for="clone-file" class="form-label">Reference audio file</label>
+                                            <input type="file" class="form-control" id="clone-file" name="file"
+                                                   accept="audio/*" required>
+                                            <div class="form-text">
+                                                Upload a short audio sample (WAV/MP3) of the voice you want to clone
+                                            </div>
+                                        </div>
+
+                                        <div class="col-12">
+                                            <label for="clone-text" class="form-label">Text to convert</label>
+                                            <textarea class="form-control" id="clone-text" name="text" rows="3"
+                                                      placeholder="Enter text to generate with cloned voice..." required></textarea>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <label for="clone-language" class="form-label">Language</label>
+                                            <select class="form-select" id="clone-language" name="language">
+                                                <option value="en">English (en)</option>
+                                                <option value="es">Spanish (es)</option>
+                                                <option value="fr">French (fr)</option>
+                                                <option value="de">German (de)</option>
+                                                <option value="it">Italian (it)</option>
+                                                <option value="pt">Portuguese (pt)</option>
+                                                <option value="ru">Russian (ru)</option>
+                                                <option value="zh-cn">Chinese (zh-cn)</option>
+                                                <option value="ja">Japanese (ja)</option>
+                                                <option value="ko">Korean (ko)</option>
+                                                <option value="ar">Arabic (ar)</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <label for="clone-format" class="form-label">Output format</label>
+                                            <select class="form-select" id="clone-format" name="output_format">
+                                                <option value="wav">WAV</option>
+                                                <option value="mp3">MP3</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="col-12">
+                                            <button type="submit" class="btn btn-primary w-100">
+                                                <i class="bi bi-magic"></i> Clone Voice & Generate
+                                                <div id="clone-loading" class="htmx-indicator">
+                                                    <div class="spinner-border spinner-border-sm ms-2" role="status"></div>
+                                                </div>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+
+                                <div id="clone-result" class="mt-4"></div>
+                            </div>
+
+                            <!-- API Info Tab -->
+                            <div class="tab-pane fade" id="info" role="tabpanel">
+                                <h4 class="card-title mb-3">
+                                    <i class="bi bi-info-circle"></i> API Information
+                                </h4>
+
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="card mb-3">
+                                            <div class="card-header">
+                                                <i class="bi bi-voices"></i> Available Voices
+                                            </div>
+                                            <div class="card-body">
+                                                <div id="voices-list"
+                                                     hx-get="/voices"
+                                                     hx-target="this"
+                                                     hx-swap="innerHTML">
+                                                    <div class="text-center">
+                                                        <div class="spinner-border" role="status"></div>
+                                                        <div>Loading voices...</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <div class="card mb-3">
+                                            <div class="card-header">
+                                                <i class="bi bi-translate"></i> Supported Languages
+                                            </div>
+                                            <div class="card-body">
+                                                <div id="languages-list"
+                                                     hx-get="/languages"
+                                                     hx-target="this"
+                                                     hx-swap="innerHTML">
+                                                    <div class="text-center">
+                                                        <div class="spinner-border" role="status"></div>
+                                                        <div>Loading languages...</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="card">
+                                    <div class="card-header">
+                                        <i class="bi bi-code-slash"></i> API Endpoints
+                                    </div>
+                                    <div class="card-body">
+                                        <ul class="list-group list-group-flush">
+                                            <li class="list-group-item">
+                                                <code>GET /health</code> - Check API status
+                                            </li>
+                                            <li class="list-group-item">
+                                                <code>GET /voices</code> - Get available voices
+                                            </li>
+                                            <li class="list-group-item">
+                                                <code>GET /languages</code> - Get supported languages
+                                            </li>
+                                            <li class="list-group-item">
+                                                <code>POST /tts</code> - Convert text to speech
+                                            </li>
+                                            <li class="list-group-item">
+                                                <code>POST /clone</code> - Clone voice from audio
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="text-center text-white-50">
+                    <small>
+                        TTS API Client | Built with FastAPI, HTMX & Bootstrap |
+                        <a href="/docs" class="text-white-50" target="_blank">API Docs</a>
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Custom Scripts -->
+    <script>
+        // Handle API responses
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            const xhr = evt.detail.xhr;
+
+            // Handle health check response
+            if (evt.detail.requestConfig.path === '/health') {
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    if (data.status === 'healthy') {
+                        evt.detail.target.innerHTML = `
+                            <span class="status-indicator status-healthy"></span>
+                            <small class="text-white-50">API Healthy • ${data.engine} • ${data.device}</small>
+                        `;
+                    }
+                } catch (e) {
+                    evt.detail.target.innerHTML = `
+                        <span class="status-indicator status-error"></span>
+                        <small class="text-white-50">API Unavailable</small>
+                    `;
+                }
+            }
+
+            // Handle voices response
+            if (evt.detail.requestConfig.path === '/voices') {
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    evt.detail.target.innerHTML = `
+                        <div class="row g-2">
+                            ${data.voices.slice(0, 12).map(voice => `
+                                <div class="col-6">
+                                    <small class="badge bg-light text-dark">${voice}</small>
+                                </div>
+                            `).join('')}
+                            ${data.voices.length > 12 ? `<div class="col-12"><small class="text-muted">... and ${data.voices.length - 12} more voices</small></div>` : ''}
+                        </div>
+                    `;
+                } catch (e) {
+                    evt.detail.target.innerHTML = '<div class="text-danger">Failed to load voices</div>';
+                }
+            }
+
+            // Handle languages response
+            if (evt.detail.requestConfig.path === '/languages') {
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    evt.detail.target.innerHTML = `
+                        <div class="row g-2">
+                            ${data.languages.map(lang => `
+                                <div class="col-6 col-md-4">
+                                    <small class="badge bg-primary">${lang}</small>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } catch (e) {
+                    evt.detail.target.innerHTML = '<div class="text-danger">Failed to load languages</div>';
+                }
+            }
+
+            // Handle TTS and Clone responses (audio files)
+            if (xhr.responseURL && xhr.responseURL.includes('/tts') || xhr.responseURL.includes('/clone')) {
+                if (xhr.status === 200 && xhr.getResponseHeader('content-type')?.includes('audio/')) {
+                    const filename = xhr.getResponseHeader('content-disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'generated_audio.wav';
+                    const blob = new Blob([xhr.response], { type: xhr.getResponseHeader('content-type') });
+                    const url = URL.createObjectURL(blob);
+
+                    evt.detail.target.innerHTML = `
+                        <div class="card result-card border-success">
+                            <div class="card-body">
+                                <h5 class="card-title text-success">
+                                    <i class="bi bi-check-circle-fill"></i> Success!
+                                </h5>
+                                <p class="card-text">Audio generated successfully</p>
+                                <audio controls class="audio-player">
+                                    <source src="${url}" type="${xhr.getResponseHeader('content-type')}">
+                                    Your browser does not support the audio element.
+                                </audio>
+                                <div class="mt-3">
+                                    <a href="${url}" download="${filename}" class="btn btn-outline-success btn-sm">
+                                        <i class="bi bi-download"></i> Download ${filename}
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else if (xhr.status >= 400) {
+                    try {
+                        const error = JSON.parse(xhr.responseText);
+                        evt.detail.target.innerHTML = `
+                            <div class="card result-card border-danger">
+                                <div class="card-body">
+                                    <h5 class="card-title text-danger">
+                                        <i class="bi bi-exclamation-triangle-fill"></i> Error
+                                    </h5>
+                                    <p class="card-text">${error.detail || 'An error occurred'}</p>
+                                </div>
+                            </div>
+                        `;
+                    } catch (e) {
+                        evt.detail.target.innerHTML = `
+                            <div class="card result-card border-danger">
+                                <div class="card-body">
+                                    <h5 class="card-title text-danger">
+                                        <i class="bi bi-exclamation-triangle-fill"></i> Error
+                                    </h5>
+                                    <p class="card-text">Failed to process request</p>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+            }
+        });
+
+        // Clear results when switching tabs
+        document.querySelectorAll('#apiTabs .nav-link').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.getElementById('tts-result').innerHTML = '';
+                document.getElementById('clone-result').innerHTML = '';
+            });
+        });
+
+        // Auto-load API info when info tab is clicked
+        document.getElementById('info-tab').addEventListener('click', function() {
+            // HTMX will handle loading voices and languages automatically
+        });
+    </script>
+</body>
+</html>
