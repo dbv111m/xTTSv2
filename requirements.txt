@@ -1,0 +1,16 @@
+# Web framework
+fastapi
+uvicorn[standard]
+python-multipart
+
+# TTS
+coqui-tts[languages]
+
+# Environment
+python-dotenv
+
+# Audio processing (for format conversion if needed)
+pydub
+
+# Logging
+structlog
