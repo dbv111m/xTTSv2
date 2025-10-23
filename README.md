@@ -40,10 +40,9 @@ python main.py
 
 Перейдите по адресу: **http://127.0.0.1:34765**
 
-Вы увидите красивый интерфейс с тремя вкладками:
-- **Text to Speech** - Преобразование текста в речь
-- **Voice Clone** - Клонирование голоса
-- **API Info** - Информация об API
+Вы увидите красивый интерфейс с вкладками:
+- **Text to Speech** - Преобразование текста в речь с поддержкой клонирования голоса
+- **API Info** - Информация об API (если включено)
 
 ### 3. Попробуйте!
 
@@ -126,12 +125,14 @@ response = requests.post(
     data={
         "text": "Привет, мир!",
         "language": "ru",
+        "speaker": "Daisy Studious",
         "output_format": "wav"
     }
 )
 
-# Сохранить аудио
-with open("output.wav", "wb") as f:
+# Файл сохранится с именем типа "2025-01-15_14-30_Daisy Studious.wav"
+filename = response.headers.get('content-disposition', '').split('filename=')[1].strip('"')
+with open(filename, "wb") as f:
     f.write(response.content)
 ```
 

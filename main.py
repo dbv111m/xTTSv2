@@ -50,6 +50,10 @@ async def lifespan(app: FastAPI):
     try:
         tts.initialize()
         logger.info("TTS engine initialized successfully")
+        # Cache voices for UI
+        global available_voices
+        available_voices = tts.get_voices()
+        logger.info(f"Cached {len(available_voices)} voices")
     except Exception as e:
         logger.error("Failed to initialize TTS engine", error=str(e))
         raise
@@ -92,6 +96,16 @@ async def get_voices():
         logger.error("Failed to get voices", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to retrieve voices")
 
+@app.get("/voices-select")
+async def get_voices_for_select():
+    """Get voices formatted for HTML select options"""
+    try:
+        voices = available_voices if available_voices else tts.get_voices()
+        return {"voices": voices}
+    except Exception as e:
+        logger.error("Failed to get voices for select", error=str(e))
+        return {"voices": []}
+
 @app.get("/languages")
 async def get_languages():
     """Get list of supported languages"""
@@ -118,20 +132,41 @@ async def text_to_speech(
         if not validate_language(language, supported_languages):
             raise HTTPException(status_code=400, detail=f"Unsupported language: {language}")
 
-        if speaker_wav and not validate_file_exists(speaker_wav):
-            raise HTTPException(status_code=400, detail=f"Reference audio file not found: {speaker_wav}")
+        speaker_wav_path = None
+        if speaker_wav:
+            # Save uploaded file temporarily
+            temp_dir = Path(OUTPUT_DIR) / "temp"
+            temp_dir.mkdir(exist_ok=True)
+
+            import uuid
+            temp_filename = f"reference_{uuid.uuid4().hex()}.wav"
+            speaker_wav_path = temp_dir / temp_filename
+
+            with open(speaker_wav_path, "wb") as f:
+                content = await speaker_wav.read()
+                f.write(content)
 
         # Generate speech
         audio_path = tts.generate_speech(
             text=text,
             language=language,
             speaker=speaker,
-            speaker_wav=speaker_wav
+            speaker_wav=str(speaker_wav_path) if speaker_wav_path else None
         )
+
+        # Clean up temp file
+        if speaker_wav_path and speaker_wav_path.exists():
+            os.remove(speaker_wav_path)
 
         # Convert format if needed
         if output_format.lower() != "wav":
             audio_path = tts.convert_format(audio_path, output_format)
+
+        # Generate filename with timestamp and speaker
+        from datetime import datetime
+        speaker_name = speaker or "default"
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+        filename = f"{timestamp}_{speaker_name}.{output_format}"
 
         # Schedule cleanup
         background_tasks.add_task(cleanup_old_files, OUTPUT_DIR)
@@ -140,7 +175,7 @@ async def text_to_speech(
         return FileResponse(
             path=audio_path,
             media_type=f"audio/{output_format}",
-            filename=f"tts_output.{output_format}"
+            filename=filename
         )
 
     except HTTPException:
