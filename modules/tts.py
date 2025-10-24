@@ -79,11 +79,13 @@ class CoquiXTTS(TTSBase):
         try:
             if speaker_wav:
                 # Voice cloning with reference audio
+                logger.info("Generating speech with voice cloning", speaker_wav=speaker_wav)
                 self.tts.tts_to_file(text=text, language=language, file_path=str(output_path),
                                    speaker_wav=speaker_wav)
             else:
                 # Use predefined speaker
                 speaker = speaker or self.config.get("default_speaker", "Daisy Studious")
+                logger.info("Generating speech with predefined speaker", speaker=speaker)
                 self.tts.tts_to_file(text=text, language=language, file_path=str(output_path),
                                    speaker=speaker)
 
@@ -91,12 +93,34 @@ class CoquiXTTS(TTSBase):
             return str(output_path)
 
         except Exception as e:
-            logger.error("Failed to generate speech", error=str(e))
+            logger.error("Failed to generate speech", error=str(e), exc_info=True)
+            # Try fallback: generate with default speaker without voice cloning
+            if speaker_wav:
+                logger.info("Retrying without voice cloning due to error")
+                try:
+                    speaker = self.config.get("default_speaker", "Daisy Studious")
+                    self.tts.tts_to_file(text=text, language=language, file_path=str(output_path),
+                                       speaker=speaker)
+                    logger.info("Speech generated successfully with fallback", output_path=str(output_path))
+                    return str(output_path)
+                except Exception as fallback_e:
+                    logger.error("Fallback also failed", error=str(fallback_e))
             raise
 
     def get_voices(self) -> List[str]:
-        self.initialize()
-        return self.tts.speakers
+        try:
+            self.initialize()
+            voices = self.tts.speakers
+            logger.info(f"Retrieved {len(voices)} voices from TTS engine")
+            return voices
+        except Exception as e:
+            logger.warning(f"Failed to get voices from TTS engine: {e}")
+            # Return fallback voices
+            return [
+                "Claribel Dervla", "Daisy Studious", "Gracie Wise", "Tammie Ema", "Ana Florence",
+                "Annmarie Nele", "Asya Anara", "Brenda Stern", "Gitta Nikolina", "Henriette Usha",
+                "Sofia Hellen", "Tanja Adelina", "Vjollca Johnnie", "Andrew Chipper", "Badr Odhiambo"
+            ]
 
     def get_languages(self) -> List[str]:
         return self.SUPPORTED_LANGUAGES

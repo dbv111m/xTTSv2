@@ -8,7 +8,7 @@ import structlog
 
 from config import (
     HOST, PORT, DEBUG, TTS_ENGINE, MODEL_NAME, DEVICE, OUTPUT_DIR,
-    DEFAULT_LANGUAGE, DEFAULT_SPEAKER, DEFAULT_FORMAT, API_KEY
+    DEFAULT_LANGUAGE, DEFAULT_SPEAKER, DEFAULT_FORMAT, API_KEY, SHOW_API_INFO_TAB
 )
 from modules.tts import TTSEngine
 from modules.utils import validate_language, validate_file_exists, cleanup_old_files
@@ -32,6 +32,24 @@ structlog.configure(
 
 logger = structlog.get_logger()
 
+# Global variable to store voices (initialized after TTS engine)
+HARDCODED_VOICES = [
+    "Claribel Dervla", "Daisy Studious", "Gracie Wise", "Tammie Ema", "Ana Florence",
+    "Annmarie Nele", "Asya Anara", "Brenda Stern", "Gitta Nikolina", "Henriette Usha",
+    "Sofia Hellen", "Tanja Adelina", "Vjollca Johnnie", "Andrew Chipper", "Badr Odhiambo",
+    "Dionisio Schuyler", "Royston Min", "Viktor Eka", "Abrahan Mack", "Adde Michal",
+    "Baldur Sanjin", "Craig Gutsy", "Damien Black", "Gilberto Mathias", "Ilkin Urbano",
+    "Kazuhiko Atallah", "Ludvig Milivoj", "Suad Qasim", "Torcull Diarmuid", "Viktor Menelaos",
+    "Zacharie Aimilios", "Nova Hogarth", "Maja Ruoho", "Uta Obando", "Lidiya Szekeres",
+    "Chandra MacFarland", "Szofi Granger", "Camilla Holmström", "Lilya Stainthorpe",
+    "Zofija Kendrick", "Narelle Moon", "Barbora MacLean", "Alexandra Hisakawa", "Alma María",
+    "Rosemary Okafor", "Ige Behringer", "Filip Traverse", "Damjan Chapman", "Wulf Carlevaro",
+    "Aaron Dreschner", "Kumar Dahl", "Eugenio Mataracı", "Ferran Simen", "Xavier Hayasaka",
+    "Luis Moray", "Marcos Rudaski"
+]
+
+available_voices = HARDCODED_VOICES
+
 # Initialize TTS engine
 config_dict = {
     "tts_engine": TTS_ENGINE,
@@ -51,9 +69,13 @@ async def lifespan(app: FastAPI):
         tts.initialize()
         logger.info("TTS engine initialized successfully")
         # Cache voices for UI
-        global available_voices
-        available_voices = tts.get_voices()
-        logger.info(f"Cached {len(available_voices)} voices")
+        try:
+            voices = tts.get_voices()
+            if voices:
+                available_voices = voices
+            logger.info(f"Cached {len(available_voices)} voices")
+        except Exception as e:
+            logger.warning(f"Failed to load voices, using fallback: {e}")
     except Exception as e:
         logger.error("Failed to initialize TTS engine", error=str(e))
         raise
@@ -90,7 +112,7 @@ async def health_check():
 async def get_voices():
     """Get list of available voices"""
     try:
-        voices = tts.get_voices()
+        voices = available_voices if available_voices else tts.get_voices()
         return {"voices": voices}
     except Exception as e:
         logger.error("Failed to get voices", error=str(e))
@@ -99,12 +121,7 @@ async def get_voices():
 @app.get("/voices-select")
 async def get_voices_for_select():
     """Get voices formatted for HTML select options"""
-    try:
-        voices = available_voices if available_voices else tts.get_voices()
-        return {"voices": voices}
-    except Exception as e:
-        logger.error("Failed to get voices for select", error=str(e))
-        return {"voices": []}
+    return {"voices": available_voices}
 
 @app.get("/languages")
 async def get_languages():
@@ -118,10 +135,10 @@ async def get_languages():
 
 @app.post("/tts")
 async def text_to_speech(
+    speaker_wav: UploadFile = File(None, description="Reference audio file for voice cloning"),
     text: str = Form(..., description="Text to convert to speech"),
     language: str = Form(DEFAULT_LANGUAGE, description="Language code"),
     speaker: Optional[str] = Form(None, description="Speaker name for predefined voices"),
-    speaker_wav: Optional[str] = Form(None, description="Path to reference audio file for voice cloning"),
     output_format: str = Form(DEFAULT_FORMAT, description="Output format: wav or mp3"),
     background_tasks: BackgroundTasks = BackgroundTasks()
 ):
@@ -133,7 +150,7 @@ async def text_to_speech(
             raise HTTPException(status_code=400, detail=f"Unsupported language: {language}")
 
         speaker_wav_path = None
-        if speaker_wav:
+        if speaker_wav and speaker_wav.filename:
             # Save uploaded file temporarily
             temp_dir = Path(OUTPUT_DIR) / "temp"
             temp_dir.mkdir(exist_ok=True)
@@ -147,11 +164,14 @@ async def text_to_speech(
                 f.write(content)
 
         # Generate speech
+        speaker_wav_str = str(speaker_wav_path) if speaker_wav_path else None
+        logger.info("Calling TTS generate_speech", text=text[:50], language=language, speaker=speaker, speaker_wav=speaker_wav_str)
+
         audio_path = tts.generate_speech(
             text=text,
             language=language,
             speaker=speaker,
-            speaker_wav=str(speaker_wav_path) if speaker_wav_path else None
+            speaker_wav=speaker_wav_str
         )
 
         # Clean up temp file
@@ -162,9 +182,9 @@ async def text_to_speech(
         if output_format.lower() != "wav":
             audio_path = tts.convert_format(audio_path, output_format)
 
-        # Generate filename with timestamp and speaker
+        # Generate filename with timestamp and speaker (no spaces)
         from datetime import datetime
-        speaker_name = speaker or "default"
+        speaker_name = (speaker or "default").replace(" ", "_")
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
         filename = f"{timestamp}_{speaker_name}.{output_format}"
 
@@ -181,68 +201,12 @@ async def text_to_speech(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to generate speech", error=str(e), text=text[:100])
-        raise HTTPException(status_code=500, detail="Failed to generate speech")
-
-@app.post("/clone")
-async def voice_clone(
-    file: UploadFile = File(..., description="Reference audio file for voice cloning"),
-    text: str = Form(..., description="Text to convert to speech"),
-    language: str = Form(DEFAULT_LANGUAGE, description="Language code"),
-    output_format: str = Form(DEFAULT_FORMAT, description="Output format: wav or mp3"),
-    background_tasks: BackgroundTasks = BackgroundTasks()
-):
-    """Clone voice from uploaded reference audio"""
-    try:
-        # Save uploaded file temporarily
-        temp_dir = Path(OUTPUT_DIR) / "temp"
-        temp_dir.mkdir(exist_ok=True)
-
-        reference_path = temp_dir / f"reference_{os.urandom(8).hex()}.wav"
-
-        with open(reference_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
-
-        # Validate language
-        supported_languages = tts.get_languages()
-        if not validate_language(language, supported_languages):
-            raise HTTPException(status_code=400, detail=f"Unsupported language: {language}")
-
-        # Generate speech with voice cloning
-        audio_path = tts.generate_speech(
-            text=text,
-            language=language,
-            speaker_wav=str(reference_path)
-        )
-
-        # Convert format if needed
-        if output_format.lower() != "wav":
-            audio_path = tts.convert_format(audio_path, output_format)
-
-        # Cleanup temp file
-        os.remove(reference_path)
-
-        # Schedule cleanup
-        background_tasks.add_task(cleanup_old_files, OUTPUT_DIR)
-
-        # Return audio file
-        return FileResponse(
-            path=audio_path,
-            media_type=f"audio/{output_format}",
-            filename=f"cloned_voice.{output_format}"
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Failed to clone voice", error=str(e))
-        if 'reference_path' in locals():
-            try:
-                os.remove(reference_path)
-            except:
-                pass
-        raise HTTPException(status_code=500, detail="Failed to clone voice")
+        logger.error("Failed to generate speech", error=str(e), text=text[:100], exc_info=True)
+        # Return more detailed error message
+        error_detail = f"Failed to generate speech: {str(e)}"
+        if "sens" in str(e).lower():
+            error_detail = "TTS library error. Please try again or use a different voice."
+        raise HTTPException(status_code=500, detail=error_detail)
 
 if __name__ == "__main__":
     import uvicorn

@@ -17,7 +17,10 @@ DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "outputs")
 DEFAULT_LANGUAGE = os.getenv("DEFAULT_LANGUAGE", "en")
 DEFAULT_SPEAKER = os.getenv("DEFAULT_SPEAKER", "Daisy Studious")
-DEFAULT_FORMAT = os.getenv("DEFAULT_FORMAT", "wav")  # wav or mp3
+DEFAULT_FORMAT = os.getenv("DEFAULT_FORMAT", "mp3")  # wav or mp3
+
+# UI Configuration
+SHOW_API_INFO_TAB = os.getenv("SHOW_API_INFO_TAB", "true").lower() == "true"
 
 # Security (for future)
 API_KEY = os.getenv("API_KEY")  # Optional API key for authentication

@@ -136,22 +136,18 @@
                                     <i class="bi bi-mic"></i> Convert Text to Speech
                                 </h4>
 
-                                <form hx-post="/tts"
-                                      hx-target="#tts-result"
-                                      hx-encoding="multipart/form-data"
-                                      hx-swap="innerHTML"
-                                      hx-indicator="#tts-loading">
+                                <form id="tts-form" enctype="multipart/form-data">
 
                                     <div class="row g-3">
                                         <div class="col-12">
                                             <label for="tts-text" class="form-label">Text to convert</label>
-                                            <textarea class="form-control" id="tts-text" name="text" rows="3"
+                                            <textarea class="form-control" id="tts-text" rows="3"
                                                       placeholder="Enter text to convert to speech..." required></textarea>
                                         </div>
 
                                         <div class="col-md-6">
                                             <label for="tts-language" class="form-label">Language</label>
-                                            <select class="form-select" id="tts-language" name="language">
+                                            <select class="form-select" id="tts-language">
                                                 <option value="en">English (en)</option>
                                                 <option value="es">Spanish (es)</option>
                                                 <option value="fr">French (fr)</option>
@@ -168,23 +164,23 @@
 
                                         <div class="col-md-6">
                                             <label for="tts-speaker" class="form-label">Voice</label>
-                                            <select class="form-select" id="tts-speaker" name="speaker">
+                                            <select class="form-select" id="tts-speaker">
                                                 <option value="">Loading voices...</option>
                                             </select>
                                         </div>
 
                                         <div class="col-md-6">
                                             <label for="tts-format" class="form-label">Output format</label>
-                                            <select class="form-select" id="tts-format" name="output_format">
+                                            <select class="form-select" id="tts-format">
                                                 <option value="wav">WAV</option>
-                                                <option value="mp3">MP3</option>
+                                                <option value="mp3" selected>MP3</option>
                                             </select>
                                         </div>
 
                                         <div class="col-md-6">
                                             <label class="form-label">Voice cloning (optional)</label>
                                             <div class="file-input-group">
-                                                <input type="file" id="tts-speaker-wav" name="speaker_wav" accept="audio/*">
+                                                <input type="file" id="tts-speaker-wav" accept="audio/*">
                                                 <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('tts-speaker-wav').click()">
                                                     <i class="bi bi-upload"></i> Choose Reference Audio
                                                 </button>
@@ -196,12 +192,12 @@
                                         </div>
 
                                         <div class="col-12">
-                                            <button type="submit" class="btn btn-primary w-100">
-                                                <i class="bi bi-play-circle"></i> Generate Speech
-                                                <div id="tts-loading" class="htmx-indicator">
-                                                    <div class="spinner-border spinner-border-sm ms-2" role="status"></div>
-                                                </div>
-                                            </button>
+                                        <button type="button" id="tts-submit" class="btn btn-primary w-100">
+                                        <i class="bi bi-play-circle"></i> Generate Speech
+                                        <div id="tts-loading" class="d-none">
+                                        <span class="spinner-border spinner-border-sm ms-2" role="status"></span>
+                                        </div>
+                                        </button>
                                         </div>
                                     </div>
                                 </form>
@@ -452,6 +448,114 @@
                 fileNameDiv.className = 'mt-2 text-success small';
             } else {
                 fileNameDiv.textContent = '';
+            }
+        });
+
+        // Handle TTS form submission
+        document.getElementById('tts-submit').addEventListener('click', async function() {
+            const form = document.getElementById('tts-form');
+            const resultDiv = document.getElementById('tts-result');
+            const loadingDiv = document.getElementById('tts-loading');
+            const submitBtn = document.getElementById('tts-submit');
+
+            // Show loading
+            loadingDiv.classList.remove('d-none');
+            submitBtn.disabled = true;
+            resultDiv.innerHTML = '';
+
+            try {
+                const formData = new FormData();
+
+                // Add form fields manually to control what gets sent
+                const text = document.getElementById('tts-text').value;
+                const language = document.getElementById('tts-language').value;
+                const speaker = document.getElementById('tts-speaker').value;
+                const outputFormat = document.getElementById('tts-format').value;
+                const speakerWavFile = document.getElementById('tts-speaker-wav').files[0];
+
+                formData.append('text', text);
+                formData.append('language', language);
+                if (speaker) formData.append('speaker', speaker);
+                formData.append('output_format', outputFormat);
+                if (speakerWavFile) formData.append('speaker_wav', speakerWavFile);
+
+                const response = await fetch('/tts', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    // Handle audio file response
+                    const contentType = response.headers.get('content-type');
+                    const contentDisposition = response.headers.get('content-disposition');
+                    const filename = contentDisposition ? contentDisposition.split('filename=')[1].replace(/"/g, '') : 'generated_audio.mp3';
+
+                    const blob = await response.blob();
+                    const url = URL.createObjectURL(blob);
+
+                    resultDiv.innerHTML = `
+                        <div class="card result-card border-success">
+                            <div class="card-body">
+                                <h5 class="card-title text-success">
+                                    <i class="bi bi-check-circle-fill"></i> Success!
+                                </h5>
+                                <p class="card-text">Audio generated successfully</p>
+                                <audio controls class="audio-player">
+                                    <source src="${url}" type="${contentType}">
+                                    Your browser does not support the audio element.
+                                </audio>
+                                <div class="mt-3">
+                                    <a href="${url}" download="${filename}" class="btn btn-outline-success btn-sm">
+                                        <i class="bi bi-download"></i> Download ${filename}
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    // Handle error
+                    const errorText = await response.text();
+                    try {
+                        const error = JSON.parse(errorText);
+                        resultDiv.innerHTML = `
+                            <div class="card result-card border-danger">
+                                <div class="card-body">
+                                    <h5 class="card-title text-danger">
+                                        <i class="bi bi-exclamation-triangle-fill"></i> Error
+                                    </h5>
+                                    <p class="card-text">${error.detail || 'An error occurred'}</p>
+                                </div>
+                            </div>
+                        `;
+                    } catch (e) {
+                        resultDiv.innerHTML = `
+                            <div class="card result-card border-danger">
+                                <div class="card-body">
+                                    <h5 class="card-title text-danger">
+                                        <i class="bi bi-exclamation-triangle-fill"></i> Error
+                                    </h5>
+                                    <p class="card-text">Failed to process request</p>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+            } catch (error) {
+                console.error('Request failed:', error);
+                resultDiv.innerHTML = `
+                    <div class="card result-card border-danger">
+                        <div class="card-body">
+                            <h5 class="card-title text-danger">
+                                <i class="bi bi-exclamation-triangle-fill"></i> Network Error
+                            </h5>
+                            <p class="card-text">Failed to connect to the server</p>
+                        </div>
+                    </div>
+                `;
+            } finally {
+                // Hide loading
+                loadingDiv.classList.add('d-none');
+                submitBtn.disabled = false;
             }
         });
 
